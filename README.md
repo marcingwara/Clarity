@@ -142,4 +142,7 @@ Your decisions stay yours.
 - optional cloud sync (opt-in)
 
 ## 👤 Author
-Marcin Gwara
+Marcin Gwara QA Automation Engineer | AI-driven Testing Enthusiast
+
+## Clarity
+Ask first. Understand second. Decide last.
