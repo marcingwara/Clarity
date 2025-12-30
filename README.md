@@ -123,23 +123,23 @@ Run:
 streamlit run app.py
 ```
 ## 🔒 Privacy & data
-	•	All decisions are stored locally
-	•	No user data is sent anywhere except to Gemini for inference
-	•	No analytics, no tracking
+- All decisions are stored locally
+- No user data is sent anywhere except to Gemini for inference
+- No analytics, no tracking
 
 Your decisions stay yours.
 
 ## 🧪 Project status
-	•	Core features: ✅ done
-	•	Insights & patterns: 🧪 beta
-	•	UI polish: 🚧 ongoing
-	•	Long-term vision: personal decision intelligence
+- Core features: ✅ done
+- Insights & patterns: 🧪 beta
+- UI polish: 🚧 ongoing
+- Long-term vision: personal decision intelligence
 
 ## 🧭 Future ideas
-	•	timeline view of decisions
-	•	visual decision patterns
-	•	long-term outcome tracking
-	•	optional cloud sync (opt-in)
+- timeline view of decisions
+- visual decision patterns
+- long-term outcome tracking
+- optional cloud sync (opt-in)
 
 ## 👤 Author
 Marcin Gwara
