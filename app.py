@@ -1,3 +1,4 @@
+import base64
 import os
 import time
 from datetime import datetime
@@ -32,9 +33,30 @@ ADMIN_MODE = (os.getenv("CLARITY_ADMIN", "0") == "1")
 ENABLE_ML_TOPICS_UI = (os.getenv("CLARITY_ML_TOPICS", "0") == "1")
 
 # ===================== STREAMLIT SETUP =====================
-st.set_page_config(page_title="Clarity", page_icon="🧠", layout="centered")
-st.title(APP_TITLE)
-st.caption("Ask first. Understand second. Decide last.")
+
+def render_logo(path: str, width: int = 260, lift_px: int = 28):
+    b64 = base64.b64encode(Path(path).read_bytes()).decode("utf-8")
+    st.markdown(
+        f"""
+        <div style="
+            display:flex;
+            align-items:center;
+            justify-content:flex-start;
+            margin-top: -{lift_px}px;
+            margin-bottom: 8px;
+        ">
+            <img src="data:image/png;base64,{b64}"
+                 style="width:{width}px; height:auto; display:block;" />
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+render_logo("logo.png", width=480)
+
+
+
+
 
 # ===================== API KEY =====================
 def get_api_key() -> Optional[str]:
@@ -137,6 +159,14 @@ def save_future_reflection(timestamp: str, future_text: str) -> bool:
     return True
 
 # ===================== SIDEBAR (LIGHT) =====================
+with st.sidebar:
+    logo_path = Path(__file__).resolve().parent / "logo.png"
+    if logo_path.exists():
+        st.image(str(logo_path), use_container_width=True)
+    else:
+        st.caption("Logo file not found: logo.png")
+
+    st.divider()
 with st.sidebar:
     st.header("Quick")
 
