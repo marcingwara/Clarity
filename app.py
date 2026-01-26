@@ -9,7 +9,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from google import genai
 
-from prompts import questions_prompt, analysis_prompt, future_you_prompt
+from prompts import questions_prompt, analysis_prompt, future_you_prompt, detect_language, get_system_instruction
 from memory import load_decisions, append_decision, delete_decision_by_timestamp, rewrite_all_decisions
 from ml import embed_text, top_k_similar
 from insights import compute_insights, format_top
@@ -53,10 +53,6 @@ def render_logo(path: str, width: int = 260, lift_px: int = 28):
     )
 
 render_logo("logo.png", width=480)
-
-
-
-
 
 # ===================== API KEY =====================
 def get_api_key() -> Optional[str]:
@@ -118,11 +114,39 @@ def cooldown_ready(seconds: float = COOLDOWN_SECONDS) -> bool:
     st.session_state["last_api_call"] = time.time()
     return True
 
-def call_gemini(prompt: str) -> str:
+def call_gemini(prompt: str, problem_text: str) -> str:
+    """
+    Wywołuje Gemini z automatyczną detekcją języka.
+
+    Args:
+        prompt: Wygenerowany prompt
+        problem_text: Oryginalny tekst problemu użytkownika (do detekcji języka)
+
+    Returns:
+        str: Odpowiedź od Gemini w języku użytkownika
+    """
     if not cooldown_ready():
         raise RuntimeError("Cooldown active")
-    resp = client.models.generate_content(model=CHAT_MODEL, contents=prompt)
-    return resp.text if hasattr(resp, "text") else str(resp)
+
+    # Wykryj język z problemu użytkownika
+    lang_code = detect_language(problem_text)
+
+    # Pobierz system instruction dla tego języka
+    system_inst = get_system_instruction(lang_code)
+
+    # KLUCZOWE: Skonfiguruj model z system_instruction
+    config = {
+        "system_instruction": system_inst
+    }
+
+    # Wywołaj API z konfiguracją
+    response = client.models.generate_content(
+        model=CHAT_MODEL,
+        contents=prompt,
+        config=config
+    )
+
+    return response.text if hasattr(response, "text") else str(response)
 
 def safe_embed_problem(problem: str):
     try:
@@ -159,14 +183,7 @@ def save_future_reflection(timestamp: str, future_text: str) -> bool:
     return True
 
 # ===================== SIDEBAR (LIGHT) =====================
-with st.sidebar:
-    logo_path = Path(__file__).resolve().parent / "logo.png"
-    if logo_path.exists():
-        st.image(str(logo_path), use_container_width=True)
-    else:
-        st.caption("Logo file not found: logo.png")
 
-    st.divider()
 with st.sidebar:
     st.header("Quick")
 
@@ -187,7 +204,7 @@ with st.sidebar:
         for score, d in st.session_state.similar[:3]:
             st.write(f"**{score:.2f}** — {d.get('problem','')[:70]}…")
     else:
-        st.caption("Run “Find similar” in Decide tab.")
+        st.caption("Run 'Find similar' in Decide tab.")
 
 # ===================== MAIN TABS =====================
 tab_decide, tab_history, tab_insights, tab_settings = st.tabs(
@@ -233,7 +250,7 @@ with tab_decide:
                 prompt = questions_prompt(problem, demo_mode=True)
                 with st.spinner("Generating questions..."):
                     try:
-                        questions_text = call_gemini(prompt)
+                        questions_text = call_gemini(prompt, problem)  # ← POPRAWIONE
                     except Exception as e:
                         st.error("Gemini call failed.")
                         st.code(str(e))
@@ -296,7 +313,7 @@ with tab_decide:
 
                 with st.spinner("Analyzing..."):
                     try:
-                        result_text = call_gemini(prompt)
+                        result_text = call_gemini(prompt, st.session_state.problem)  # ← POPRAWIONE
                     except Exception as e:
                         st.error("Gemini call failed.")
                         st.code(str(e))
@@ -339,7 +356,7 @@ with tab_decide:
                         )
                         with st.spinner("Simulating your future perspective..."):
                             try:
-                                future_text = call_gemini(future_prompt)
+                                future_text = call_gemini(future_prompt, st.session_state.problem)  # ← POPRAWIONE
                             except Exception as e:
                                 st.error("Gemini call failed.")
                                 st.code(str(e))

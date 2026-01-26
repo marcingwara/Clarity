@@ -1,29 +1,56 @@
+import re
+
+def detect_language(text: str) -> str:
+    """
+    Wykrywa język tekstu i zwraca kod ISO.
+    """
+    text_lower = text.lower()
+
+    # Charakterystyczne słowa - sprawdzamy z spacjami by uniknąć false positives
+    polish_indicators = ['czy', 'jak', 'mam', 'jest', 'nie', 'tak', 'ale', 'się', 'że', 'będę', 'chcę', 'mój', 'moja', 'powinien']
+    english_indicators = ['the', 'is', 'am', 'are', 'should', 'can', 'have', 'what', 'how', 'when', 'my', 'need', 'want', 'whether']
+    spanish_indicators = ['que', 'como', 'tengo', 'debo', 'puedo', 'hay', 'para', 'con', 'mi', 'necesito', 'debería']
+    french_indicators = ['que', 'comme', 'dois', 'peux', 'suis', 'pour', 'avec', 'mon', 'besoin', 'devrais']
+
+    # Zliczanie ze spacjami (bardziej dokładne)
+    pl_count = sum(1 for word in polish_indicators if f' {word} ' in f' {text_lower} ' or text_lower.startswith(f'{word} '))
+    en_count = sum(1 for word in english_indicators if f' {word} ' in f' {text_lower} ' or text_lower.startswith(f'{word} '))
+    es_count = sum(1 for word in spanish_indicators if f' {word} ' in f' {text_lower} ' or text_lower.startswith(f'{word} '))
+    fr_count = sum(1 for word in french_indicators if f' {word} ' in f' {text_lower} ' or text_lower.startswith(f'{word} '))
+
+    scores = {'pl': pl_count, 'en': en_count, 'es': es_count, 'fr': fr_count}
+    detected = max(scores, key=scores.get)
+
+    return detected if scores[detected] > 0 else 'en'
+
+
+def get_system_instruction(lang_code: str) -> str:
+    """
+    Zwraca system instruction dla Gemini API - WYMUSZA język odpowiedzi.
+    """
+    instructions = {
+        'pl': "Odpowiadaj WYŁĄCZNIE po polsku. Wszystkie nagłówki, opisy, liczby, tabele i tekst muszą być po polsku. Nie używaj żadnych innych języków.",
+        'en': "Respond EXCLUSIVELY in English. All headings, descriptions, numbers, tables and text must be in English. Do not use any other languages.",
+        'es': "Responde EXCLUSIVAMENTE en español. Todos los encabezados, descripciones, números, tablas y texto deben estar en español. No uses ningún otro idioma.",
+        'fr': "Répondez EXCLUSIVEMENT en français. Tous les en-têtes, descriptions, nombres, tableaux et texte doivent être en français. N'utilisez aucune autre langue."
+    }
+    return instructions.get(lang_code, instructions['en'])
+
+
 def questions_prompt(problem: str, demo_mode: bool) -> str:
     """
-    This prompt is responsible ONLY for asking clarifying questions.
-    It must NOT give advice, analysis, or solutions.
+    Prompt dla pytań - prosty, bez instrukcji językowych.
     """
+    return f"""You are Clarity — an AI companion for thoughtful decision-making.
 
-    return f"""
-You are Clarity — an AI companion for thoughtful decision-making.
-
-IMPORTANT LANGUAGE RULE:
-- Detect the language used by the user.
-- Respond strictly in the SAME language.
-- Do not mix languages.
-
-YOUR TASK:
-- Ask clarifying questions ONLY.
-- Do NOT give advice.
-- Do NOT analyze options.
-- Do NOT propose solutions.
-
-User's decision problem:
+USER PROBLEM:
 {problem}
 
-Return exactly {2 if demo_mode else 3} short, practical clarifying questions.
-Format the output as a numbered list.
-"""
+YOUR TASK:
+Ask exactly {2 if demo_mode else 3} short, practical clarifying questions.
+Format: numbered list (1), 2), 3)).
+Do NOT give advice or analyze options.
+Do NOT add any other text."""
 
 
 def analysis_prompt(
@@ -33,28 +60,12 @@ def analysis_prompt(
         demo_mode: bool
 ) -> str:
     """
-    Practical, concrete decision support.
-    Output must be fully in the user's language.
+    Prompt analizy - prosty, bez instrukcji językowych.
     """
-
     priorities_text = ", ".join(priorities) if priorities else "Not specified"
     answers_text = "\n".join([f"{i+1}) {answers[i]}" for i in range(len(answers))])
 
-    options_n = 2 if demo_mode else 3
-
-    return f"""
-You are Clarity — a calm, practical decision mentor.
-
-LANGUAGE RULE (ABSOLUTE):
-- Detect the language used by the user.
-- Respond ONLY in that language.
-- All headings, labels, explanations — EVERYTHING in the same language.
-
-CORE BEHAVIOR:
-- Be concrete, structured, and helpful.
-- Do NOT create confusion.
-- Do NOT mix languages.
-- If something is uncertain, say it clearly.
+    return f"""You are Clarity — a calm, practical decision mentor.
 
 DECISION PROBLEM:
 {problem}
@@ -65,51 +76,78 @@ USER ANSWERS:
 USER PRIORITIES:
 {priorities_text}
 
-Produce the response with clear sections, but WRITE ALL SECTION TITLES IN THE USER'S LANGUAGE.
+FORMATTING RULES:
+- Use headings with ### and make section titles bold with **
+- Section titles must be in LARGER font and BOLD
+- For section 5 "Pros vs Cons comparison", use a table format
+- Numbers must be explicit and consistent
 
-Required content:
+Produce the response EXACTLY in this structure:
 
-1) Clarify constraints
-- 3 bullet points describing limits like money, time, obligations.
-- If something important is missing, clearly state what is missing.
+### **1) Clarify constraints**
+- **Constraint 1:** concrete limitation (money / time / obligation)
+- **Constraint 2:** concrete limitation
+- **Constraint 3:** concrete limitation
+- **Missing information:** explicitly state what critical data is missing (if any)
 
-2) Restate the decision
-- One clear sentence describing what the user is deciding.
+### **2) Restate the decision**
+- **One clear sentence** describing what the user is deciding.
 
-3) Possible options
-- Exactly {options_n} realistic options.
-For each option:
-- Short description
-- What improves immediately
-- What is sacrificed
+### **3) Possible options**
 
-4) Evaluation with numbers
-For each option:
-- Score from 0 to 100
-- Confidence percentage (how certain this score is)
-- Short explanation referencing priorities and constraints
+#### **Option 1**
+- **Description:** short and concrete
+- **Immediate gains:** what improves right away
+- **Immediate losses:** what is sacrificed
 
-5) Clear recommendation
-- Explicitly state which option fits best RIGHT NOW.
-- Explain why in concrete terms.
-- Clearly state what would make the recommendation change.
+#### **Option 2**
+- **Description:** short and concrete
+- **Immediate gains:** what improves right away
+- **Immediate losses:** what is sacrificed
 
-6) Short-term action plan (next 7 days)
-- Specific, measurable actions with numbers or deadlines.
-- No vague advice.
+### **4) Numerical evaluation**
 
-7) Safety rules
-- One condition that triggers a backup plan.
-- One simple rule to prevent overload or burnout.
-- One clear date or condition to review the decision again.
+#### **Option 1**
+- **Overall fit:** XX / 100
+- **Confidence level:** XX %
+- **Reasoning:** 1–2 concrete sentences tied to priorities and constraints
 
-Tone:
-- calm
-- grounded
-- practical
-- zero motivational fluff
-"""
+#### **Option 2**
+- **Overall fit:** XX / 100
+- **Confidence level:** XX %
+- **Reasoning:** 1–2 concrete sentences tied to priorities and constraints
+
+### **5) Pros vs Cons comparison (percentage-based)**
+
+| Option | Pros Strength | Cons Weight | Summary |
+|--------|---------------|-------------|---------|
+| **Option 1** | XX% | XX% | [one practical sentence explaining the balance] |
+| **Option 2** | XX% | XX% | [one practical sentence explaining the balance] |
+
+*(Pros % + Cons % MUST equal 100 for each option)*
+
+### **6) Clear recommendation**
+- **Best option RIGHT NOW:** explicitly state Option 1 or Option 2
+- **Why:** concrete reasoning, no motivation fluff
+- **This recommendation would change if:** one clear condition
+
+### **7) Short-term action plan (next 7 days)**
+- **Action 1:** measurable, with number or deadline
+- **Action 2:** measurable
+- **Action 3:** measurable
+
+### **8) Safety rules**
+- **Backup trigger:** one concrete condition
+- **Overload rule:** one simple behavioral rule
+- **Review point:** specific date or condition
+
+Tone: calm, grounded, practical, zero motivational fluff."""
+
+
 def future_you_prompt(problem: str, result_text: str, past_decisions: list, months: int = 6) -> str:
+    """
+    Prompt dla "future you".
+    """
     memory = []
     for d in past_decisions[-3:]:
         memory.append(
@@ -119,10 +157,9 @@ def future_you_prompt(problem: str, result_text: str, past_decisions: list, mont
         )
     memory_block = "\n".join(memory) if memory else "No past decisions."
 
-    return f"""
-You are the SAME person, but {months} months in the future.
+    return f"""You are the SAME person, but {months} months in the future.
 
-CURRENT DECISION:
+USER PROBLEM:
 {problem}
 
 ORIGINAL ANALYSIS (what you believed then):
@@ -138,7 +175,42 @@ Write a grounded reflection from the future perspective:
 3) One short advice sentence for my past self
 
 Rules:
-- supportive but honest
-- no generic motivational fluff
-- 120–180 words
-"""
+- Supportive but honest tone
+- No generic motivational fluff
+- 120–180 words"""
+
+
+# ============================================================
+# FUNKCJA DO DODANIA W app.py - ZASTĄP call_gemini()
+# ============================================================
+
+def call_gemini_with_language(client, prompt: str, problem_text: str) -> str:
+    """
+    Wywołuje Gemini API z automatyczną detekcją języka.
+
+    Args:
+        client: Gemini client
+        prompt: Wygenerowany prompt (questions_prompt, analysis_prompt, etc.)
+        problem_text: Oryginalny tekst problemu użytkownika (do detekcji języka)
+
+    Returns:
+        str: Odpowiedź od Gemini w języku użytkownika
+    """
+    from google import genai
+
+    # Wykryj język z problemu użytkownika
+    lang_code = detect_language(problem_text)
+
+    # Pobierz system instruction dla tego języka
+    system_inst = get_system_instruction(lang_code)
+
+    # KLUCZOWE: Użyj GenerativeModel z system_instruction
+    model = genai.GenerativeModel(
+        model_name="models/gemini-flash-lite-latest",
+        system_instruction=system_inst  # ← TO WYMUSZA JĘZYK!
+    )
+
+    # Wywołaj API
+    response = model.generate_content(prompt)
+
+    return response.text if hasattr(response, "text") else str(response)
